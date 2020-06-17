@@ -21,12 +21,14 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+import CCTypes::*;
+
 // L1 -> L2 -> LL
 
 // cache size = bank num * way num * set num * 64B
 
 // 16KB L1
-typedef 16 L1Num;
+typedef 8 L1Num;
 
 typedef 4 L1WayNum;
 typedef 0 LgL1BankNum;
@@ -47,7 +49,7 @@ typedef Bit#(TLog#(L1PRqNum)) L1PRqMshrIdx;
 typedef Bit#(32) ProcRqId;
 
 // 128KB L2
-typedef 4 L2Num;
+typedef 2 L2Num;
 
 typedef 8 L2WayNum;
 typedef 0 LgL2BankNum;
