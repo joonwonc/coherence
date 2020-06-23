@@ -1,4 +1,7 @@
-import L1LLSimple::*;
+import L1LLWrapper::*;
+import HCC::*;
+import HCCTypes::*;
+import HCCTest::*;
 
 ////////// Connectal interfaces
 
@@ -17,21 +20,20 @@ interface Host;
 endinterface
 
 module mkHost#(HostIndication indication) (Host);
-    L1LLSimple mem <- mkL1LLI();
-    // CCTest tester <- mkCCTestRandom(mem);
+    CC mem <- mkCCL1LL();
+    CCTest tester <- mkCCTestRandom(mem);
     Reg#(Bool) started <- mkReg(False);
     Reg#(Bool) ended <- mkReg(False);
 
     rule check_end (started && !ended);
-        // let n = tester.getThroughput;
-        // indication.finish(n);
-        indication.finish(0);
+        let n = tester.getThroughput;
+        indication.finish(n);
         ended <= True;
     endrule
 
     interface HostRequest request;
         method Action start(Bit#(32) maxCycle);
-	    // tester.start(maxCycle);
+	    tester.start(maxCycle);
 	    started <= True;
 	endmethod
     endinterface

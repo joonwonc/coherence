@@ -50,26 +50,3 @@ module mkL1LLSimple#(Vector#(L1DNum, L1ProcResp#(ProcRqId)) procResp)(L1LLSimple
     interface dReq = map(getDReqIfc, dc);
     interface to_mem = llc.to_mem;
 endmodule
-
-(* synthesize *)
-module mkL1LLI(L1LLSimple);
-    function L1ProcResp#(ProcRqId) getL1ProcResp(Integer i);
-        return (interface L1ProcResp;
-            method Action respLd(ProcRqId id, Data d);
-                noAction;
-            endmethod
-            method Action respLrScAmo(ProcRqId id, Data d);
-                noAction;
-            endmethod
-            method ActionValue#(Tuple2#(LineByteEn, Line)) respSt(ProcRqId id);
-                return unpack(0);
-            endmethod
-            method Action evict(LineAddr a);
-                noAction;
-            endmethod
-        endinterface);
-    endfunction
-
-    let cc <- mkL1LLSimple(map(getL1ProcResp, genVector));
-    return cc;
-endmodule
