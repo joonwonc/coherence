@@ -37,8 +37,8 @@ import IBank::*;
 import LLBank::*;
 import Connectable::*;
 
-export L1LL(..);
-export mkL1LL;
+// export L1LL(..);
+// export mkL1LL;
 
 // LLChildNum == L1Num
 // XXX no LLC banking: LgLLBankNum = 0

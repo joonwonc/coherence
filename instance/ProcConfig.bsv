@@ -18,5 +18,19 @@
 `define DRAM_LATENCY 1
 `define LOG_BOOT_ROM_BYTES 12
 
+`define LOG_LLC_LINES 1
+`define LOG_LLC_WAYS 1
+`define DTLB_REQ_NUM 1
+`define L2TLB_REQ_NUM 1
+`define BOOKKEEPING_FP_FMA_SIZE 1
+`define LOG_L2_TLB_4KB_WAYS 1
+`define LOG_L2_TLB_4KB_SIZE 1
+`define LOG_L1_WAYS 1
+`define LOG_L1_LINES 1
+`define L1_TLB_SIZE 1
+`define BOOKKEEPING_INT_MUL_SIZE 1
+`define L2_TLB_HUGE_SIZE 1
+`define USER_CLK_PERIOD 16
+
 // used for checking deadlock
 `define LOG_DEADLOCK_CYCLES 26
