@@ -4,10 +4,12 @@ import FIFOF::*;
 
 // from the processor library
 import Types::*;
-import CCTypes::*;
-import CCSizes::*;
+import MemoryTypes::*;
+import CacheUtils::*;
 
 // from the cache library
+import CCTypes::*;
+import CCSizes::*;
 // import CrossBar::*;
 // import L1Bank::*;
 // import L1Wrapper::*;
@@ -24,7 +26,6 @@ import HCCTypes::*;
 
 (* synthesize *)
 module mkCCL1LL(CC);
-    MemBank mb <- mkMemBankBram();
     Vector#(L1DNum, FIFOF#(CCMsg)) rss <- replicateM(mkFIFOF());
 
     function L1ProcResp#(ProcRqId) getL1ProcResp(Integer i);
@@ -46,25 +47,31 @@ module mkCCL1LL(CC);
 
     let cc <- mkL1LLSimple(map(getL1ProcResp, genVector));
 
-    // interface FifoDeq#(type t);
-    // method Bool notEmpty;
-    // method Action deq;
-    // method t first;
-    // endinterface
+    let mrqs = interface FIFOF#(CCMsg);
+                   method Action enq(CCMsg mrq) = noAction;
+                   method Action deq = cc.to_mem.toM.deq;
+                   method CCMsg first;
+                       let tmm = cc.to_mem.toM.first();
+                       // TODO: convert [tmm] to [CCMsg]
+                       return unpack(0);
+                   endmethod
+                   method Action clear = noAction;
+                   method Bool notFull; return False; endmethod
+                   method Bool notEmpty = cc.to_mem.toM.notEmpty;
+               endinterface;
+    let mrss = interface FIFOF#(CCMsg);
+                   method Action enq(CCMsg mrs);
+                       let mrm = ?; // TODO: convert [mrq] to [MemRsMsg]
+                       cc.to_mem.rsFromM.enq(mrm);
+                   endmethod
+                   method Action deq = noAction;
+                   method CCMsg first; return unpack(0); endmethod
+                   method Action clear = noAction;
+                   method Bool notFull = cc.to_mem.rsFromM.notFull;
+                   method Bool notEmpty; return False; endmethod
+               endinterface;
 
-    // interface FifoEnq#(type t);
-    // method Bool notFull;
-    // method Action enq(t x);
-    // endinterface
-
-    // connect memory
-    // cc.to_mem = interface MemFifoClient#(LdMemRqId#(LLCRqMshrIdx), void);
-    //                 interface FifoDeq#(ToMemMsg#(LdMemRqId#(LLCRqMshrIdx), void)) toM;
-    //                     method Bool notEmpty
-    //                 endinterface
-    //                 interface FifoEnq#(MemRsMsg#(LdMemRqId#(LLCRqMshrIdx), void)) rsFromM;
-    //                 endinterface
-    //             endinterface
+    MemBank mb <- mkMemBankBramA(mrqs, mrss);
 
     // from HCCTest.bsv
     let getRqId = 6'b000000;
@@ -75,9 +82,9 @@ module mkCCL1LL(CC);
     function ProcRq#(ProcRqId) fromCCMsg (CCMsg rq);
         let prq = ProcRq { id: 0, // does not matter here for performance check
                           addr: rq.addr,
-                          toState: (rq.id == getRqId ? S : M);
-                          op: (rq.id == getRqId ? Ld : St);
-                          byteEn: ?;
+                          toState: (rq.id == getRqId ? S : M),
+                          op: (rq.id == getRqId ? Ld : St),
+                          byteEn: ?,
                           data: rq.value,
                           amoInst: ? };
         return prq;
