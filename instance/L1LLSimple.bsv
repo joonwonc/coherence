@@ -14,7 +14,7 @@ import LLBank::*;
 import LLWrapper::*;
 import L1LL::*;
 
-typedef 8 L1DNum;
+typedef 4 L1DNum;
 typedef 1 LLNum;
 
 interface L1LLSimple;
@@ -23,7 +23,7 @@ interface L1LLSimple;
 endinterface
 
 // A two-level cache structure (L1-LL), without instruction caches, without DMA.
-module mkL1LLSimple#(Vector#(L1DNum, L1ProcResp#(ProcRqId)) procResp)(L1LLSimple);
+module mkL1LLSimpleA#(Vector#(L1DNum, L1ProcResp#(ProcRqId)) procResp)(L1LLSimple);
     Vector#(L1DNum, L1CacheWrapper) dc = ?;
     for(Integer i = 0; i < valueof(L1DNum); i = i+1) begin
         dc[i] <- mkL1CacheWrapper(procResp[i]);
