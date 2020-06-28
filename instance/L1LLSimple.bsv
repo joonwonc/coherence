@@ -118,7 +118,7 @@ module mkL1LLSimpleA#(Vector#(L1DNum, L1ProcResp#(ProcRqId)) procResp)(L1LLSimpl
     for(Integer i = 0; i < valueof(L1DNum); i = i+1) begin
         dc[i] <- mkL1CacheWrapper(procResp[i]);
     end
-    LLBankWrapper llc <- mkLLBankWrapper();
+    Vector#(LLNum, LLBankWrapper) llc <- replicateM(mkLLBankWrapper);
 
     let cRqXBar <- mkL1CRqToLLXBar;
     let cRsXBar <- mkL1CRsToLLXBar;
@@ -130,9 +130,11 @@ module mkL1LLSimpleA#(Vector#(L1DNum, L1ProcResp#(ProcRqId)) procResp)(L1LLSimpl
         mkConnection(pXBar.dstIfc[i], dc[i].to_parent.fromP);
     end
 
-    mkConnection(cRqXBar.dstIfc[0], llc.to_child.rqFromC);
-    mkConnection(cRsXBar.dstIfc[0], llc.to_child.rsFromC);
-    mkConnection(pXBar.srcIfc[0], llc.to_child.toC);
+    for(Integer i = 0; i < valueOf(LLNum); i = i+1) begin
+        mkConnection(cRqXBar.dstIfc[i], llc[i].to_child.rqFromC);
+        mkConnection(cRsXBar.dstIfc[i], llc[i].to_child.rsFromC);
+        mkConnection(pXBar.srcIfc[i], llc[i].to_child.toC);
+    end
 
     function L1ProcReq#(ProcRqId) getDReqIfc(L1CacheWrapper ifc);
         return ifc.procReq;

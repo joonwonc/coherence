@@ -123,7 +123,6 @@ typedef enum {InitTable, InitAddr, Idle, Process, Done} TestFSM deriving(Bits, E
 (* synthesize *)
 module mkTbL1LL(Empty);
     // randomize req
-    // D$
     Vector#(L1DNum, Randomize#(ReqStall)) randDCReqStall <- replicateM(mkGenericRandomizer);
     Vector#(L1DNum, Randomize#(MemTestOp)) randDCOp <- replicateM(mkConstrainedRandomizer(minBound, maxBound));
     Vector#(L1DNum, Randomize#(LLCTag)) randDCTag <- replicateM(mkConstrainedRandomizer(0, fromInteger(valueOf(TagNum) - 1)));
@@ -137,17 +136,9 @@ module mkTbL1LL(Empty);
     Vector#(L1DNum, Randomize#(Bool)) randDCDoubleWord <- replicateM(mkGenericRandomizer);
 
     // record req
-    // D$
-    Vector#(L1DNum, RegFile#(TestId, Maybe#(MemTestReq))) dcReqTable <- replicateM(mkRegFileFull);
     Vector#(L1DNum, Reg#(TestCnt)) sendDCCnt <- replicateM(mkReg(0));
-    Vector#(L1DNum, RWire#(MemTestReq)) sendDCReq <- replicateM(mkRWire);
-
-    // print helper for send: print when read this number
-    Vector#(L1DNum, Reg#(TestCnt)) sendPrintDCCnt <- replicateM(mkReg(fromInteger(valueOf(TestPrintNum))));
 
     // record resp
-    // D$
-    Vector#(L1DNum, RegFile#(TestId, Bool)) dcRespDoneTable <- replicateM(mkRegFileFull);
     Vector#(L1DNum, Reg#(TestCnt)) recvDCCnt <- replicateM(mkReg(0));
     Vector#(L1DNum, RWire#(MemTestResp)) recvDCResp <- replicateM(mkRWire);
     Vector#(L1DNum, Reg#(TimeOutCnt)) dcTimeOut <- replicateM(mkReg(0));
@@ -157,8 +148,6 @@ module mkTbL1LL(Empty);
 
     // init
     Reg#(TestFSM) testFSM <- mkConfigReg(InitTable);
-    Reg#(Bool) coreTableInitDone <- mkReg(False);
-    Reg#(TestId) iterId <- mkReg(0);
     Reg#(LLCTag) iterTag <- mkReg(0);
     Reg#(LLCIndex) iterIndex <- mkReg(0);
 
@@ -173,8 +162,7 @@ module mkTbL1LL(Empty);
             endmethod
             method ActionValue#(Tuple2#(LineByteEn, Line)) respSt(ProcRqId id);
                 recvDCResp[i].wset(MemTestResp {t: St, id: truncate(id), data: ?});
-                let req = validValue(dcReqTable[i].sub(truncate(id)));
-                return tuple2(req.lineBE, req.line);
+                return unpack(0);
             endmethod
             method Action evict(LineAddr a);
                 noAction;
@@ -189,24 +177,9 @@ module mkTbL1LL(Empty);
     Vector#(L1DNum, L1ProcReq#(ProcRqId)) ifcDC = memSys.dReq;
     DelayMemTest dutMem = delayMem.to_test;
 
-    rule doInitCoreTable(testFSM == InitTable && !coreTableInitDone);
-        for(Integer i = 0; i < valueOf(L1DNum); i = i+1) begin
-            dcReqTable[i].upd(iterId, Invalid);
-            dcRespDoneTable[i].upd(iterId, False);
-        end
-        // change state
-        if(iterId == fromInteger(valueof(TestNum) - 1)) begin
-            iterId <= 0;
-            coreTableInitDone <= True;
-        end
-        else begin
-            iterId <= iterId + 1;
-        end
-    endrule
-
-    rule doInitTableDone(testFSM == InitTable && coreTableInitDone);
+    rule doInitTableDone(testFSM == InitTable);
         testFSM <= InitAddr;
-        $fdisplay(stderr, "INFO: init table done");
+        $fdisplay(stderr, "INFO: init table done: %d", valueOf(LgTestMemSzBytes));
     endrule
 
     rule doInitAddr(testFSM == InitAddr);
@@ -302,19 +275,11 @@ module mkTbL1LL(Empty);
                     addr: req.addr,
                     toState: getToState(req.op),
                     op: getMemOp(req.op),
-                    byteEn: req.byteEn,
+                    byteEn: unpack(0), // req.byteEn,
                     data: req.data,
-                    amoInst: req.amoInst
+                    amoInst: unpack(0) // req.amoInst
                 });
-                sendDCReq[i].wset(req);
-
-                // output req cnt
-                if((sendDCCnt[i] + 1) == sendPrintDCCnt[i]) begin
-                    $fdisplay(stderr, "INFO: %t D$ %d send req %d/%d",
-                        $time, i, sendDCCnt[i] + 1, valueOf(TestNum)
-                    );
-                    sendPrintDCCnt[i] <= sendPrintDCCnt[i] + fromInteger(valueOf(TestPrintNum));
-                end
+                sendDCCnt[i] <= sendDCCnt[i] + 1;
             end
         endrule
     end
@@ -323,98 +288,11 @@ module mkTbL1LL(Empty);
 
     (* fire_when_enabled *)
     rule doConProcess(testFSM == Process);
-        // changes to make on refLink
-        Vector#(L1DNum, Maybe#(LineAddr)) wrAddr = replicate(Invalid); // for clear others' links
-        Vector#(L1DNum, Maybe#(LineAddr)) lrAddr = replicate(Invalid); // for clear own link
-        Vector#(L1DNum, Maybe#(L1BankId)) scBank = replicate(Invalid); // for clear own link
-
         // handle D$ req/resp
         for(Integer i = 0; i < valueOf(L1DNum); i = i+1) begin
-            // store req just sent
-            if(sendDCReq[i].wget matches tagged Valid .req) begin
-                sendDCCnt[i] <= sendDCCnt[i] + 1;
-                // save req
-                dcReqTable[i].upd(req.id, Valid (req));
-            end
             // check resp just recv
             if(recvDCResp[i].wget matches tagged Valid .resp) begin
                 recvDCCnt[i] <= recvDCCnt[i] + 1; // incr recv cnt
-                // set resp as done
-                if(!dcRespDoneTable[i].sub(resp.id)) begin
-                    dcRespDoneTable[i].upd(resp.id, True);
-                end
-                else begin
-                    $fdisplay(stderr, "[TbL1LL] ERROR: D$ %d resp %x duplicate", i, resp.id);
-                    $finish;
-                end
-                // get req
-                let r = dcReqTable[i].sub(resp.id);
-                if(isValid(r)) begin
-                    // good
-                end
-                else begin
-                    $fdisplay(stderr, "[TbL1LL] ERROR: D$ %d resp %x does not have valid req", i, resp.id);
-                    $finish;
-                end
-                let req = validValue(r);
-                // check resp type
-                if(getMemRespType(req.op) == resp.t) begin
-                    // good
-                end
-                else begin
-                    $fdisplay(stderr, "[TbL1LL] ERROR: D$ %d resp %x wrong type", i, resp.id);
-                    $finish;
-                end
-                // some common info
-                let bankId = getBankId(req.addr);
-                let lineAddr = getLineAddr(req.addr);
-                // check resp val and apply actions to ref mem
-                if(req.op == Ld) begin
-                    // load: check value
-                    let dutData = resp.data;
-                end
-                else if(req.op == St) begin
-                    // set addr for clearing others' link
-                    wrAddr[i] = Valid (lineAddr);
-                end
-                else if(req.op == Lr) begin
-                    // load reserve: check value
-                    let dutData = resp.data;
-                    // record Lr addr for setting link addr
-                    lrAddr[i] = Valid (lineAddr);
-                end
-                else if(req.op == Sc) begin
-                    // store cond: check value, figure out whether ref mem is success
-                    //Bool refSucc = refLink[i][bankId] == Valid (lineAddr);
-                    //Data refData = refSucc ? fromInteger(valueof(ScSuccVal)) : fromInteger(valueof(ScFailVal));
-                    let dutData = resp.data;
-                    // FIXME TODO I cannot make BSV compiles with linkAddr estimation, so assume LR/SC is correctly implemented
-                    let refData = dutData;
-                    if(refData == dutData || dutData == fromInteger(valueof(ScFailVal))) begin
-                        // good: it is fine for dut to have failed Sc
-                    end
-                    else begin
-                        $fwrite(stderr, "[TbL1LL] ERROR: D$ %d wrong Sc resp %x\n", i, resp.id);
-                        $finish;
-                    end
-                    // update mem & link addr
-                    scBank[i] = Valid (bankId); // record sc bank for clearing own link
-                    if(dutData == fromInteger(valueof(ScSuccVal))) begin
-                        // record write addr for clear other link
-                        wrAddr[i] = Valid (lineAddr);
-                    end
-                end
-                else if(req.op == Amo) begin
-                    // AMO: check value
-                    Data dutData = resp.data;
-                    Bool upper32 = req.addr[2] == 1;
-                    // record write addr for clear other link
-                    wrAddr[i] = Valid (lineAddr);
-                end
-                else begin
-                    $fdisplay(stderr, "[TbL1LL] ERROR: D$ %d resp %x unknown op\n", i, resp.id);
-                    $finish;
-                end
                 // reset time out
                 dcTimeOut[i] <= 0;
             end

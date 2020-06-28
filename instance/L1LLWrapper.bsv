@@ -13,15 +13,14 @@ import CCSizes::*;
 import DelayMemTypes::*;
 import IdealDelayMem::*;
 
-import L1LLSimple::*;
+import L1LL::*;
 
 // from the Hemiola integration library
-// import HMemBank::*;
 import HCC::*;
 import HCCTypes::*;
 
 interface L1LLSimpleRss;
-    interface L1LLSimple l1ll;
+    interface L1LL l1ll;
     interface Vector#(L1DNum, FifoDeq#(CCMsg)) rsDeqs;
 endinterface
 
@@ -56,7 +55,7 @@ module mkL1LLSimple(L1LLSimpleRss);
         endinterface);
     endfunction
 
-    let cc <- mkL1LLSimpleA(map(getL1ProcResp, genVector));
+    let cc <- mkL1LL(map(getL1ProcResp, genVector));
 
     function FifoDeq#(t) toFifoDeq(FIFOF#(t) f);
         return (interface FifoDeq;
@@ -88,6 +87,7 @@ module mkCCL1LL(CC);
         if(waitCount == fromInteger(valueOf(TExp#(LLIndexSz)))) begin
             $display ("*** memory init done");
             memInit <= True;
+            delayMem.to_test.initDone;
         end
     endrule
 
