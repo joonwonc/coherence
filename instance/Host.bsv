@@ -25,7 +25,7 @@ module mkHost#(HostIndication indication) (Host);
     Reg#(Bool) started <- mkReg(False);
     Reg#(Bool) ended <- mkReg(False);
 
-    rule check_end (started && !ended);
+    rule check_end (started && tester.isEnd && !ended);
         let n = tester.getThroughput;
         indication.finish(n);
         ended <= True;

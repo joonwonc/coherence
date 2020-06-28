@@ -36,7 +36,6 @@ import RegFile::*;
 import Connectable::*;
 import GetPut::*;
 import ClientServer::*;
-import AtomicMem::*;
 import DelayMemTypes::*;
 import IdealDelayMem::*;
 import Printf::*;
@@ -180,10 +179,6 @@ typedef enum {InitTable, InitAddr, Idle, Process, Done} TestFSM deriving(Bits, E
 
 (* synthesize *)
 module mkTbL1LL(Empty);
-    // Reference
-    AtomicMem#(LgTestMemSzBytes) refMem <- mkAtomicMem;
-    Reg#(Vector#(L1DNum, Vector#(L1BankNum, Maybe#(LineAddr)))) refLink <- mkReg(replicate(replicate(Invalid)));
-
     // randomize req
     // D$
     Vector#(L1DNum, Randomize#(ReqStall)) randDCReqStall <- replicateM(mkGenericRandomizer);
@@ -386,7 +381,6 @@ module mkTbL1LL(Empty);
         Addr addr = getAddr(iterTag, iterIndex, 0);
         Line initV = replicate(addr);
         dutMem.initLine(addr, initV);
-        refMem.writeLine(addr, initV);
         if(iterIndex == fromInteger(valueOf(IndexNum) - 1)) begin
             iterIndex <= 0;
             if(iterTag == fromInteger(valueOf(TagNum) - 1)) begin
@@ -690,27 +684,14 @@ module mkTbL1LL(Empty);
                 // check resp val and apply actions to ref mem
                 if(req.op == Ld) begin
                     // load: check value
-                    let refData <- refMem.readData(req.addr);
                     let dutData = resp.data;
                     $fwrite(dcRespLog[i], "time %t: resp %x Ld\n", $time, resp.id,
-                        "ref data %x\n", refData,
                         "dut data %x\n\n", dutData
                     );
-                    if(refData == dutData) begin
-                        // good
-                    end
-                    else begin
-                        $fwrite(stderr, "[TbL1LL] ERROR: D$ %d wrong Ld resp %x\n", i, resp.id);
-                        $finish;
-                    end
                     // stats
                     ldCnt[i][bankId] <= ldCnt[i][bankId] + 1;
                 end
                 else if(req.op == St) begin
-                    // store: apply to ref mem
-                    Line line <- refMem.readLine(req.addr);
-                    Line newLine = getUpdatedLine(line, req.lineBE, req.line);
-                    refMem.writeLine(req.addr, newLine);
                     // set addr for clearing others' link
                     wrAddr[i] = Valid (lineAddr);
                     $fwrite(dcRespLog[i], "time %t: resp %x St\n\n", $time, resp.id);
@@ -719,19 +700,10 @@ module mkTbL1LL(Empty);
                 end
                 else if(req.op == Lr) begin
                     // load reserve: check value
-                    let refData <- refMem.readData(req.addr);
                     let dutData = resp.data;
                     $fwrite(dcRespLog[i], "time %t: resp %x Lr\n", $time, resp.id,
-                        "ref data %x\n", refData,
                         "dut data %x\n\n", dutData
                     );
-                    if(refData == dutData) begin
-                        // good
-                    end
-                    else begin
-                        $fwrite(stderr, "[TbL1LL] ERROR: D$ %d wrong Lr resp %x\n", i, resp.id);
-                        $finish;
-                    end
                     // record Lr addr for setting link addr
                     lrAddr[i] = Valid (lineAddr);
                     // stats
@@ -758,10 +730,6 @@ module mkTbL1LL(Empty);
                     // update mem & link addr
                     scBank[i] = Valid (bankId); // record sc bank for clearing own link
                     if(dutData == fromInteger(valueof(ScSuccVal))) begin
-                        // write mem
-                        Data data <- refMem.readData(req.addr);
-                        Data newData = getUpdatedData(data, req.byteEn, req.data);
-                        refMem.writeData(req.addr, newData);
                         // record write addr for clear other link
                         wrAddr[i] = Valid (lineAddr);
                     end
@@ -778,24 +746,9 @@ module mkTbL1LL(Empty);
                     // AMO: check value
                     Data dutData = resp.data;
                     Bool upper32 = req.addr[2] == 1;
-                    Data data <- refMem.readData(req.addr);
-                    Data refData = req.amoInst.doubleWord ? data : signExtend(
-                        upper32 ? data[63:32] : data[31:0]
-                    );
                     $fwrite(dcRespLog[i], "time %t: resp %x Amo\n", $time, resp.id,
-                        "ref data %x\n", refData,
                         "dut data %x\n\n", dutData
                     );
-                    if(refData == dutData) begin
-                        // good
-                    end
-                    else begin
-                        $fwrite(stderr, "[TbL1LL] ERROR: D$ %d wrong Amo resp %x\n", i, resp.id);
-                        $finish;
-                    end
-                    // update mem
-                    Data newData = amoExec(req.amoInst, data, req.data, upper32);
-                    refMem.writeData(req.addr, newData);
                     // record write addr for clear other link
                     wrAddr[i] = Valid (lineAddr);
                     // stats
@@ -837,79 +790,6 @@ module mkTbL1LL(Empty);
                 // write log
                 $fwrite(icReqLog[i], "time %t: ", $time, fshow(id), " ; ", fshow(req), "\n\n");
             end
-            // apply I$ req done (always comes at least 1 cycle earlier than real resp)
-            if(recvICDone[i].wget matches tagged Valid .id) begin
-                if(!isValid(icRefTable[i].sub(id))) begin
-                    // get req addr
-                    let r = icReqTable[i].sub(id);
-                    if(isValid(r)) begin
-                        // good
-                    end
-                    else begin
-                        $fdisplay(stderr, "[TbL1LL] ERROR: I$ %d done %x does not have valid req", i, id);
-                        $finish;
-                    end
-                    Addr addr = validValue(r);
-                    // get reference inst result
-                    Line line <- refMem.readLine(addr);
-                    Vector#(LineSzInst, Instruction) instVec = unpack(pack(line));
-                    LineInstOffset baseSel = getLineInstOffset(addr);
-                    Bool stop = False;
-                    L1InstResult res = replicate(Invalid);
-                    for(Integer j = 0; j < valueof(L1ISupSz); j = j+1) begin
-                        if(!stop) begin
-                            let sel = baseSel + fromInteger(j);
-                            res[j] = Valid (instVec[sel]);
-                            stop = sel == maxBound;
-                        end
-                    end
-                    // record inst result
-                    icRefTable[i].upd(id, Valid (res));
-                    $fwrite(icRespLog[i], "time %t: done %x result ", $time, id, fshow(res), "\n\n");
-                end
-                else begin
-                    $fdisplay(stderr, "[TbL1LL] ERROR: I$ %d done %x duplicate", i, id);
-                    $finish;
-                end
-            end
-            // check resp
-            if(recvICResp[i].wget matches tagged Valid .dutResp) begin
-                // resp is in order
-                TestId id = truncate(recvICCnt[i]);
-                recvICCnt[i] <= recvICCnt[i] + 1; // incr recv cnt
-                // get reference result
-                let r = icRefTable[i].sub(id);
-                $fwrite(icRespLog[i], "time %t: resp %x\n", $time, id,
-                    "ref inst ", fshow(r), "\n",
-                    "dut inst ", fshow(dutResp), "\n\n"
-                );
-                if(isValid(r)) begin
-                    // good
-                end
-                else begin
-                    $fdisplay(stderr, "[TbL1LL] ERROR: I$ %d resp %x haven't done yet", i, id);
-                    $finish;
-                end
-                let refResp = validValue(r);
-                // check value
-                if(refResp == dutResp) begin
-                    // good
-                end
-                else begin
-                    $fdisplay(stderr, "[TbL1LL] ERROR: I$ %d resp %x wrong inst", i, id);
-                    $finish;
-                end
-                // reset timeout
-                icTimeOut[i] <= 0;
-            end
-            else if(recvICCnt[i] < sendICCnt[i]) begin
-                // incr time out
-                icTimeOut[i] <= icTimeOut[i] + 1;
-                if(icTimeOut[i] >= fromInteger(valueOf(MaxTimeOut) - 1)) begin
-                    $fwrite(stderr, "[TbL1LL] ERROR: I$ %d deadlock\n", i);
-                    $finish;
-                end
-            end
         end
 
         // handle DMA req/resp
@@ -935,10 +815,6 @@ module mkTbL1LL(Empty);
                     $finish;
                 end
                 let req = validValue(r);
-                // update ref mem
-                Line line <- refMem.readLine(req.addr);
-                Line newLine = getUpdatedLine(line, req.byteEn, req.data);
-                refMem.writeLine(req.addr, newLine);
                 // record write addr for clear all link
                 dmaWrAddr[0] = Valid (getLineAddr(req.addr));
                 // record write miss
@@ -962,10 +838,6 @@ module mkTbL1LL(Empty);
                     $finish;
                 end
                 let req = validValue(r);
-                // update ref mem
-                Line line <- refMem.readLine(req.addr);
-                Line newLine = getUpdatedLine(line, req.byteEn, req.data);
-                refMem.writeLine(req.addr, newLine);
                 // record write addr for clear all link
                 dmaWrAddr[1] = Valid (getLineAddr(req.addr));
                 // record write hit
@@ -988,8 +860,6 @@ module mkTbL1LL(Empty);
                     $finish;
                 end
                 let req = validValue(r);
-                Line line <- refMem.readLine(req.addr);
-                dmaRefRdMissTable.upd(dmaId, Valid (line));
                 $fwrite(dmaRespLog, "time %t: rd miss %x\n\n", $time, dmaId);
             end
             else begin
@@ -1008,8 +878,6 @@ module mkTbL1LL(Empty);
                     $finish;
                 end
                 let req = validValue(r);
-                Line line <- refMem.readLine(req.addr);
-                dmaRefRdHitTable.upd(dmaId, Valid (line));
                 $fwrite(dmaRespLog, "time %t: rd hit %x\n\n", $time, dmaId);
             end
             else begin
@@ -1039,37 +907,6 @@ module mkTbL1LL(Empty);
             end
             let req = validValue(r);
             if(req.byteEn == replicate(False)) begin // read resp
-                // get ref value
-                Maybe#(Line) missResp = dmaRefRdMissTable.sub(resp.id);
-                Maybe#(Line) hitResp = dmaRefRdHitTable.sub(resp.id);
-                $fwrite(dmaRespLog, "time %t: resp %x Rd\n", $time,
-                    "miss ref: ", fshow(missResp), "\n",
-                    "hit ref: ", fshow(hitResp), "\n",
-                    "dut resp: ", fshow(resp.data), "\n\n"
-                );
-                Line refResp = ?;
-                if(isValid(hitResp) && !isValid(missResp)) begin
-                    refResp = validValue(hitResp);
-                end
-                else if(isValid(missResp) && !isValid(hitResp)) begin
-                    refResp = validValue(missResp);
-                end
-                else if(isValid(missResp) && isValid(hitResp)) begin
-                    $fdisplay(stderr, "[TbL1LL] ERROR: DMA resp %x, both hitResp and missResp are valid", resp.id);
-                    $finish;
-                end
-                else begin
-                    $fdisplay(stderr, "[TbL1LL] ERROR: DMA resp %x, both hitResp and missResp are invalid", resp.id);
-                    $finish;
-                end
-                // check against ref value
-                if(resp.data == refResp) begin
-                    // good
-                end
-                else begin
-                    $fwrite(stderr, "[TbL1LL] ERROR: DMA wrong Rd resp\n");
-                    $finish;
-                end
             end
             else begin // write resp
                 // check whether wr miss/hit has happened
@@ -1104,46 +941,6 @@ module mkTbL1LL(Empty);
             end
         end
 
-        // TODO FIXME this doesn't finish compilation!!
-        // update link addr
-        //Vector#(L1DNum, Vector#(L1BankNum, Maybe#(LineAddr))) nextLink = refLink;
-        //// reset by D$ write
-        //for(Integer i = 0; i < valueof(L1DNum); i = i+1) begin
-        //    if(wrAddr[i] matches tagged Valid .wa) begin
-        //        let bid = getBankId({wa, 0});
-        //        for(Integer j = 0; j < valueof(L1DNum); j = j+1) begin
-        //            if(j != i && refLink[j][bid] == Valid (wa)) begin // will not reset its own link
-        //                nextLink[j][bid] = Invalid;
-        //            end
-        //        end
-        //    end
-        //end
-        //// reset by DMA write
-        //for(Integer i = 0; i < 2; i = i+1) begin
-        //    if(dmaWrAddr[i] matches tagged Valid .wa) begin
-        //        let bid = getBankId({wa, 0});
-        //        for(Integer j = 0; j < valueof(L1DNum); j = j+1) begin
-        //            if(refLink[j][bid] == Valid (wa)) begin
-        //                nextLink[j][bid] = Invalid;
-        //            end
-        //        end
-        //    end
-        //end
-        //// reset by Sc
-        //for(Integer i = 0; i < valueof(L1DNum); i = i+1) begin
-        //    if(scBank[i] matches tagged Valid .bid) begin
-        //        nextLink[i][bid] = Invalid;
-        //    end
-        //end
-        //// set by Lr
-        //for(Integer i = 0; i < valueof(L1DNum); i = i+1) begin
-        //    if(lrAddr[i] matches tagged Valid .la) begin
-        //        let bid = getBankId({la, 0});
-        //        nextLink[i][bid] = Valid (la);
-        //    end
-        //end
-        //refLink <= nextLink;
-        
         // change state
         Bool done = True;
         for(Integer i = 0; i < valueOf(L1DNum); i = i+1) begin

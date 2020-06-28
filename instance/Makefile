@@ -11,8 +11,9 @@ PROC_LIB_PATH ?= ../../riscy-ooo/procs/lib
 CONNECTALFLAGS += --mainclockperiod=24
 CONNECTALFLAGS += --bscflags=" -aggressive-conditions +RTS -K100M -RTS -steps-max-intervals 10000000 "
 CONNECTALFLAGS += --bscflags=" -D USER_CLK_PERIOD=16 "
-CONNECTALFLAGS += --bscflags=" -D CCSIZES_FILE=\\\"L1LLSizes.bsv\\\" "
+CONNECTALFLAGS += --bscflags=" -D CCSIZES_FILE=\\\"L1LLSimpleSizes.bsv\\\" "
 CONNECTALFLAGS += --bsvpath="../src"
+CONNECTALFLAGS += --bsvpath="../tests/include"
 CONNECTALFLAGS += --bsvpath="$(HEMIOLA_LIB_PATH)"
 CONNECTALFLAGS += --bsvpath="$(PROC_LIB_PATH)"
 

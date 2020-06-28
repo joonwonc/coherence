@@ -12,10 +12,100 @@ import L1Bank::*;
 import L1Wrapper::*;
 import LLBank::*;
 import LLWrapper::*;
-import L1LL::*;
 
-typedef 4 L1DNum;
-typedef 1 LLNum;
+// Instantiations of some crossbars
+
+typedef TExp#(LgLLBankNum) LLNum;
+typedef Bit#(LgLLBankNum) LLIdx;
+typedef Bit#(TLog#(L1Num)) L1Idx;
+
+typedef CRqMsg#(L1Way, void) CRqFromL1;
+typedef CRqMsg#(LLCRqId, LLChild) CRqToLL;
+typedef CRsMsg#(void) CRsFromL1;
+typedef CRsMsg#(LLChild) CRsToLL;
+typedef PRqRsMsg#(LLCRqId, LLChild) PRqRsFromLL;
+typedef PRqRsMsg#(L1Way, void) PRqRsToL1;
+
+typedef 1 XBarSrcDelay;
+typedef 2 XBarDstDelay;
+
+// cross bar for L1 cRq to LL
+typedef CrossBar#(L1Num, XBarSrcDelay, CRqFromL1, LLNum, XBarDstDelay, CRqToLL) L1CRqToLLXBar;
+
+(* synthesize *)
+module mkL1CRqToLLXBar(L1CRqToLLXBar);
+    function XBarDstInfo#(LLIdx, CRqToLL) getL1CRqDstInfo(L1Idx whichL1, CRqFromL1 rq);
+        return XBarDstInfo {
+            idx: 0,
+            data: CRqMsg {
+                addr: rq.addr,
+                fromState: rq.fromState,
+                toState: rq.toState,
+                canUpToE: rq.canUpToE,
+                id: rq.id,
+                child: whichL1
+            }
+        };
+    endfunction
+
+    let m <- mkCrossBar(getL1CRqDstInfo);
+    return m;
+endmodule
+
+// cross bar for L1 cRs to LL
+typedef CrossBar#(L1Num, XBarSrcDelay, CRsFromL1, LLNum, XBarDstDelay, CRsToLL) L1CRsToLLXBar;
+
+(* synthesize *)
+module mkL1CRsToLLXBar(L1CRsToLLXBar);
+    function XBarDstInfo#(LLIdx, CRsToLL) getL1CRsDstInfo(L1Idx whichL1, CRsFromL1 rs);
+        return XBarDstInfo {
+            idx: 0,
+            data: CRsMsg {
+                addr: rs.addr,
+                toState: rs.toState,
+                data: rs.data,
+                child: whichL1
+            }
+        };
+    endfunction
+
+    let m <- mkCrossBar(getL1CRsDstInfo);
+    return m;
+endmodule
+
+// cross bar for LL pRqRs to L1
+typedef CrossBar#(LLNum, XBarSrcDelay, PRqRsFromLL, L1Num, XBarDstDelay, PRqRsToL1) LLPRqRsToL1XBar;
+
+(* synthesize *)
+module mkLLPRqRsToL1XBar(LLPRqRsToL1XBar);
+    function XBarDstInfo#(L1Idx, PRqRsToL1) getLLPRqRsDstInfo(LLIdx whichLL, PRqRsFromLL msg);
+        return (case(msg) matches
+            tagged PRq .rq: return XBarDstInfo {
+                idx: rq.child,
+                data: PRq (PRqMsg {
+                    addr: rq.addr,
+                    toState: rq.toState,
+                    child: ?
+                })
+            };
+            tagged PRs .rs: return XBarDstInfo {
+                idx: rs.child,
+                data: PRs (PRsMsg {
+                    addr: rs.addr,
+                    toState: rs.toState,
+                    child: ?,
+                    data: rs.data,
+                    id: rs.id
+                })
+            };
+        endcase);
+    endfunction
+
+    let m <- mkCrossBar(getLLPRqRsDstInfo);
+    return m;
+endmodule
+
+////////// Now the simple L1LL module
 
 interface L1LLSimple;
     interface Vector#(L1DNum, L1ProcReq#(ProcRqId)) dReq;

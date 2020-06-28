@@ -10,11 +10,13 @@ import CacheUtils::*;
 // from the cache library
 import CCTypes::*;
 import CCSizes::*;
+import DelayMemTypes::*;
+import IdealDelayMem::*;
 
 import L1LLSimple::*;
 
 // from the Hemiola integration library
-import HMemBank::*;
+// import HMemBank::*;
 import HCC::*;
 import HCCTypes::*;
 
@@ -68,63 +70,39 @@ module mkL1LLSimple(L1LLSimpleRss);
     interface rsDeqs = map(toFifoDeq, rss);
 endmodule
 
+typedef 30 MemDelay;
+typedef 18 LgTestMemSzBytes;
+
 (* synthesize *)
 module mkCCL1LL(CC);
     L1LLSimpleRss mem <- mkL1LLSimple();
+    Reg#(Bool) memInit <- mkReg(False);
+    Reg#(Bit#(64)) waitCount <- mkReg(0);
+
+    IdealDelayMem#(MemDelay, LgTestMemSzBytes, LdMemRqId#(LLCRqMshrIdx), void) delayMem <- mkIdealDelayMem;
+    mkConnection(mem.l1ll.to_mem, delayMem.to_proc);
+
+    // Found from [../test/L1LL/TbL1LL.bsv]: need to wait for LLC to initialize all BRAMs
+    rule init_mem (!memInit);
+        waitCount <= waitCount + 1;
+        if(waitCount == fromInteger(valueOf(TExp#(LLIndexSz)))) begin
+            $display ("*** memory init done");
+            memInit <= True;
+        end
+    endrule
 
     // from HCCTest.bsv
     let getRqId = 6'b000000;
     let setRqId = 6'b001000;
-
-    // from HMembank.bsv
-    CCMsgId readRqId = 6'h2; // [mesiRqS] in Hemiola
-    CCMsgId invWRqId = 6'h15; // [mesiInvWRq] in Hemiola
-
-    let mrqs = interface FIFOF#(CCMsg);
-                   method Action enq(CCMsg mrq) = noAction;
-                   method Action deq = mem.l1ll.to_mem.toM.deq;
-                   method CCMsg first;
-                       let tmm = mem.l1ll.to_mem.toM.first();
-                       let cmsg = ?;
-                       if (tmm matches tagged Ld .lrq)
-                           cmsg = CCMsg {id: readRqId,
-                                         type_: False,
-                                         addr: lrq.addr,
-                                         value: ? };
-                       else if (tmm matches tagged Wb .wrs)
-                           cmsg = CCMsg {id: invWRqId,
-                                         type_: False,
-                                         addr: wrs.addr,
-                                         value: wrs.data };
-                       return cmsg;
-                   endmethod
-                   method Action clear = noAction;
-                   method Bool notFull; return False; endmethod
-                   method Bool notEmpty = mem.l1ll.to_mem.toM.notEmpty;
-               endinterface;
-    let mrss = interface FIFOF#(CCMsg);
-                   method Action enq(CCMsg mrs);
-                       // XXX: keep track of id
-                       let mrm = MemRsMsg {data: mrs.value, child: ?, id: unpack(0)};
-                       mem.l1ll.to_mem.rsFromM.enq(mrm);
-                   endmethod
-                   method Action deq = noAction;
-                   method CCMsg first; return unpack(0); endmethod
-                   method Action clear = noAction;
-                   method Bool notFull = mem.l1ll.to_mem.rsFromM.notFull;
-                   method Bool notEmpty; return False; endmethod
-               endinterface;
-
-    MemBank mb <- mkMemBankBramA(mrqs, mrss);
 
     function ProcRq#(ProcRqId) fromCCMsg (CCMsg rq);
         let prq = ProcRq { id: 0, // XXX: keep track of id
                           addr: rq.addr,
                           toState: (rq.id == getRqId ? S : M),
                           op: (rq.id == getRqId ? Ld : St),
-                          byteEn: ?,
+                          byteEn: unpack(0),
                           data: rq.value[0], // XXX: need to know the actual line index
-                          amoInst: ? };
+                          amoInst: unpack(0) };
         return prq;
     endfunction
 
@@ -138,23 +116,24 @@ module mkCCL1LL(CC);
     endfunction
 
     Vector#(L1DNum, MemRqRs) _l1Ifc = newVector();
-    for (Integet i = 0; i < valueOf(l1DNum); i = i+1) begin
+    for (Integer i = 0; i < valueOf(L1DNum); i = i+1) begin
         function Action mem_enq_rq (CCMsg rq);
             return action
                        $display ("*** requested: %d ty(%d) addr(%x)", i, rq.type_, rq.addr);
                        mem.l1ll.dReq[i].req(fromCCMsg(rq));
                    endaction;
-        endfunction;
+        endfunction
         function ActionValue#(CCMsg) mem_deq_rs();
             return actionvalue
                        mem.rsDeqs[i].deq;
                        return mem.rsDeqs[i].first;
                    endactionvalue;
-        endfunction;
+        endfunction
         _l1Ifc[i] = getMemRqRs(mem_enq_rq, mem_deq_rs);
     end
+    interface l1Ifc = _l1Ifc;
 
     method Bool isInit();
-        return True;
+        return memInit;
     endmethod
 endmodule
