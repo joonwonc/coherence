@@ -1,6 +1,7 @@
 import L1LLWrapper::*;
 import HCC::*;
 import HCCTypes::*;
+import HCCWrapper::*;
 import HCCTest::*;
 
 ////////// Connectal interfaces
@@ -20,13 +21,15 @@ interface Host;
 endinterface
 
 module mkHost#(HostIndication indication) (Host);
-    CC mem <- mkCCL1LL();
-    CCTest tester <- mkCCTestRandom(mem);
+    CCMem mem <- mkCCL1LL();
+    // CCTest tester <- mkCCTestRandom(mem);
+    CCTest tester <- mkCCTestShared(mem);
     Reg#(Bool) started <- mkReg(False);
     Reg#(Bool) ended <- mkReg(False);
 
     rule check_end (started && tester.isEnd && !ended);
         let n = tester.getThroughput;
+        $display ("Trying to finish the test: #responses(%d)", n);
         indication.finish(n);
         ended <= True;
     endrule

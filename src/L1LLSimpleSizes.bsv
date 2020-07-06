@@ -13,7 +13,7 @@ typedef 4 L1WayNum;
 typedef Bit#(TLog#(L1WayNum)) L1Way;
 
 typedef 0 LgL1BankNum;
-typedef 7 LgL1SetNum;
+typedef 8 LgL1SetNum;
 typedef TExp#(LgL1BankNum) L1BankNum;
 typedef Bit#(LgL1BankNum) L1BankId;
 typedef LgL1SetNum L1IndexSz;
@@ -22,14 +22,14 @@ typedef GetTagSz#(LgL1BankNum, LgL1SetNum) L1TagSz;
 typedef Bit#(L1TagSz) L1Tag;
 
 typedef 0 LgIBankNum;
-typedef 7 LgISetNum;
+typedef 8 LgISetNum;
 typedef Bit#(LgIBankNum) IBankId;
 typedef LgISetNum IIndexSz;
 typedef Bit#(IIndexSz) IIndex;
 typedef GetTagSz#(LgIBankNum, LgISetNum) ITagSz;
 typedef Bit#(ITagSz) ITag;
 
-typedef 4 L1CRqNum;
+typedef 2 L1CRqNum;
 typedef 2 L1PRqNum;
 typedef Bit#(TLog#(L1CRqNum)) L1CRqMshrIdx;
 typedef Bit#(TLog#(L1PRqNum)) L1PRqMshrIdx;
@@ -42,7 +42,7 @@ typedef Vector#(L1ISupSz, Maybe#(Instruction)) L1InstResult;
 // Last-Level: 512KB per bank
 typedef 16 LLWayNum;
 typedef 0 LgLLBankNum;
-typedef 9 LgLLSetNum;
+typedef 10 LgLLSetNum;
 
 typedef Bit#(LgLLBankNum) LLBankId;
 typedef LgLLSetNum LLIndexSz;
@@ -51,7 +51,7 @@ typedef GetTagSz#(LgLLBankNum, LgLLSetNum) LLTagSz;
 typedef Bit#(LLTagSz) LLTag;
 typedef Bit#(TLog#(LLWayNum)) LLWay;
 
-typedef 16 LLCRqNum;
+typedef 8 LLCRqNum;
 typedef Bit#(TLog#(LLCRqNum)) LLCRqMshrIdx;
 
 typedef L1Num LLChildNum;
