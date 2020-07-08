@@ -7,7 +7,7 @@ import HCCTest::*;
 ////////// Connectal interfaces
 
 interface HostIndication;
-    method Action finish(Bit#(32) numResps);
+    method Action finish(Bit#(32) numResps, Bit#(64) mark);
 endinterface
 
 interface HostRequest;
@@ -29,8 +29,9 @@ module mkHost#(HostIndication indication) (Host);
 
     rule check_end (started && tester.isEnd && !ended);
         let n = tester.getThroughput;
+        let m = tester.getMark;
         $display ("Trying to finish the test: #responses(%d)", n);
-        indication.finish(n);
+        indication.finish(n, m);
         ended <= True;
     endrule
 

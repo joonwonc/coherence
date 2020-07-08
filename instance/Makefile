@@ -8,7 +8,7 @@ CPPFILES= SoftwareHost.cpp
 HEMIOLA_LIB_PATH ?= ../../hemiola/syn/integration
 PROC_LIB_PATH ?= ../../riscy-ooo/procs/lib
 
-CONNECTALFLAGS += --mainclockperiod=40
+CONNECTALFLAGS += --mainclockperiod=50
 CONNECTALFLAGS += --bscflags=" -aggressive-conditions +RTS -K100M -RTS -steps-max-intervals 10000000 "
 # CONNECTALFLAGS += --bscflags=" -D USER_CLK_PERIOD=16 "
 CONNECTALFLAGS += --bscflags=" -D RQ_TYPE_SEED=3 "
