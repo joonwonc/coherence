@@ -221,12 +221,12 @@ module mkCCPipe#(
 );
 
     ////////// Heads-up: a lock to turn the pipelining off by force, for performance evaluation
-    Reg#(Bool) inProgress <- mkReg(False);
-    Reg#(Bool) onWrite <- mkReg(False);
-    rule finish_write (onWrite);
-        onWrite <= False;
-        inProgress <= False;
-    endrule
+    // Reg#(Bool) inProgress <- mkReg(False);
+    // Reg#(Bool) onWrite <- mkReg(False);
+    // rule finish_write (onWrite);
+    //     onWrite <= False;
+    //     inProgress <= False;
+    // endrule
 
     // pipeline regs
 
@@ -336,9 +336,9 @@ module mkCCPipe#(
     Bool deq_guard = isValid(mat2Out_out) && initDone;
 
     // stage 1: enq req to pipeline: access info+rep RAM & bypass
-    // method Action enq(pipeCmdT cmd, Maybe#(lineT) respLine, respStateT toState) if(enq_guard);
-    method Action enq(pipeCmdT cmd, Maybe#(lineT) respLine, respStateT toState) if(enq_guard && !inProgress);
-        inProgress <= True;
+    // method Action enq(pipeCmdT cmd, Maybe#(lineT) respLine, respStateT toState) if(enq_guard && !inProgress);
+    //     inProgress <= True;
+    method Action enq(pipeCmdT cmd, Maybe#(lineT) respLine, respStateT toState) if(enq_guard);
         // read ram
         indexT index = getIndex(cmd);
         for(Integer i = 0; i < valueOf(wayNum); i = i+1) begin
@@ -372,8 +372,8 @@ module mkCCPipe#(
 
     method Bool notEmpty = deq_guard;
 
-    // method Action deqWrite(Maybe#(pipeCmdT) newCmd, ramDataT wrRam, Bool updateRep) if(deq_guard);
-    method Action deqWrite(Maybe#(pipeCmdT) newCmd, ramDataT wrRam, Bool updateRep) if(deq_guard && inProgress);
+    // method Action deqWrite(Maybe#(pipeCmdT) newCmd, ramDataT wrRam, Bool updateRep) if(deq_guard && inProgress);
+    method Action deqWrite(Maybe#(pipeCmdT) newCmd, ramDataT wrRam, Bool updateRep) if(deq_guard);
         match2OutT m2o = fromMaybe(?, mat2Out_out);
         wayT way = m2o.way;
         indexT index = getIndex(m2o.cmd);
@@ -386,7 +386,6 @@ module mkCCPipe#(
         infoRam[way].wrReq(index, wrRam.info);
         repRam.wrReq(index, repInfo);
         dataRam.wrReq(getDataRamIndex(way, index), wrRam.line);
-        onWrite <= True;
         // set bypass to Enq and Match stages
         bypass.wset(BypassInfo {
             index: index,
