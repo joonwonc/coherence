@@ -108,7 +108,7 @@ module mkCCL1LL(CCMem);
                           addr: rq.addr,
                           toState: (rq.id == getRqId ? S : M),
                           op: (rq.id == getRqId ? Ld : St),
-                          byteEn: unpack(0),
+                          byteEn: maxBound, // XXX: need to know the actual line index
                           data: rq.value[0], // XXX: need to know the actual line index
                           amoInst: unpack(0) };
         return prq;
