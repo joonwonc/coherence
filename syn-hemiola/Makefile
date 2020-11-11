@@ -5,7 +5,7 @@ H2S_INTERFACES = Host:HostIndication
 BSVFILES= Host.bsv
 CPPFILES= SoftwareHost.cpp
 
-HEMIOLA_LIB_PATH ?= ../../hemiola/syn/integration
+HEMIOLA_LIB_PATH ?= ../../hemiola-syn/syn/integration
 PROC_LIB_PATH ?= ../../riscy-ooo/procs/lib
 
 CONNECTALFLAGS += --mainclockperiod=50
