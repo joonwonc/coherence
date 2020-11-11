@@ -23,8 +23,8 @@ module mkTop(Empty);
     rule check_end (started && tester.isEnd && !ended);
         let n = tester.getThroughput();
         let m = tester.getMark();
-        $display ("Test done, throughput: %d / %d", n, fromInteger(valueOf(TestCycleCnt)));
-        $display ("Mark: %x", m);
+        $fwrite (stderr, "Test done, throughput: %d / %d", n, fromInteger(valueOf(TestCycleCnt)));
+        $fwrite (stderr, "Mark: %x", m);
         ended <= True;
     endrule
 
