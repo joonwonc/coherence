@@ -18,7 +18,9 @@ import L1LL::*;
 // from the Hemiola integration library
 import HCC::*;
 import HCCTypes::*;
+import HCCIfc::*;
 import HCCWrapper::*;
+import HMemBank::*;
 
 interface L1LLSimpleRss;
     interface L1LL l1ll;
@@ -71,7 +73,7 @@ module mkL1LLSimple(L1LLSimpleRss);
 endmodule
 
 typedef 1 MemDelay;
-typedef 19 LgTestMemSzBytes; // 14(memSize) + 5(offset)
+typedef TAdd#(MemAddrSz, AddrOffset) LgTestMemSzBytes; // 16(memSize) + 5(offset)
 
 (* synthesize *)
 module mkIdealDelayMemI(IdealDelayMem#(MemDelay, LgTestMemSzBytes, LdMemRqId#(LLCRqMshrIdx), void));
@@ -80,7 +82,7 @@ module mkIdealDelayMemI(IdealDelayMem#(MemDelay, LgTestMemSzBytes, LdMemRqId#(LL
 endmodule
 
 (* synthesize *)
-module mkCCL1LL(CCMem);
+module mkCCL1LL(CC);
     L1LLSimpleRss mem <- mkL1LLSimple();
     Vector#(L1DNum, Reg#(ProcRqId)) rqIds <- replicateM(mkReg(0));
     Reg#(Bool) memInit <- mkReg(False);
@@ -115,49 +117,37 @@ module mkCCL1LL(CCMem);
     endfunction
 
     // interface CC
-    function MemRqRs getMemRqRs (function Action enq_rq (CCMsg _),
-                                 function ActionValue#(CCMsg) deq_rs ());
+    function MemRqRs#(CCMsg) getMemRqRs (function Action enq_rq (CCMsg _),
+                                         function ActionValue#(CCMsg) deq_rs ());
         return interface MemRqRs;
                    method mem_enq_rq = enq_rq;
                    method mem_deq_rs = deq_rs;
                endinterface;
     endfunction
 
-    interface CC cc;
-        Vector#(L1DNum, MemRqRs) _l1Ifc = newVector();
-        for (Integer i = 0; i < valueOf(L1DNum); i = i+1) begin
-            function Action mem_enq_rq (CCMsg rq);
-                return action
-                           $display ("*** requested: %d ty(%d) addr(%x)", i, rq.type_, rq.addr);
-                           mem.l1ll.dReq[i].req(fromCCMsg(rqIds[i], rq));
-                           rqIds[i] <= rqIds[i] + 1;
-                       endaction;
-            endfunction
-            function ActionValue#(CCMsg) mem_deq_rs();
-                return actionvalue
-                           mem.rsDeqs[i].deq;
-                           return mem.rsDeqs[i].first;
-                       endactionvalue;
-            endfunction
-            _l1Ifc[i] = getMemRqRs(mem_enq_rq, mem_deq_rs);
-        end
-        interface l1Ifc = _l1Ifc;
+    Vector#(L1DNum, MemRqRs#(CCMsg)) _l1Ifc = newVector();
+    for (Integer i = 0; i < valueOf(L1DNum); i = i+1) begin
+        function Action mem_enq_rq (CCMsg rq);
+            return action
+                       $display ("*** requested: %d ty(%d) addr(%x)", i, rq.type_, rq.addr);
+                       mem.l1ll.dReq[i].req(fromCCMsg(rqIds[i], rq));
+                       rqIds[i] <= rqIds[i] + 1;
+                   endaction;
+        endfunction
+        function ActionValue#(CCMsg) mem_deq_rs();
+            return actionvalue
+                       mem.rsDeqs[i].deq;
+                       return mem.rsDeqs[i].first;
+                   endactionvalue;
+        endfunction
+        _l1Ifc[i] = getMemRqRs(mem_enq_rq, mem_deq_rs);
+    end
+    interface l1Ifc = _l1Ifc;
 
-        interface DMA llDma;
-            method Action dma_putRq (DmaRq rq); endmethod
-            method ActionValue#(CCValue) dma_getRs();
-                return unpack(0);
-            endmethod
-        endinterface
-
-        method Bool isInit();
-            return memInit;
-        endmethod
-    endinterface
-
-    interface DMA memDma;
-        method Action dma_putRq (DmaRq rq); endmethod
-        method ActionValue#(CCValue) dma_getRs();
+    interface DMA llDma;
+        method Action dma_rdReq (Bit#(14) a); endmethod
+        method Action dma_wrReq (Struct33 w); endmethod
+        method ActionValue#(CCValue) dma_rdResp();
             return unpack(0);
         endmethod
     endinterface
