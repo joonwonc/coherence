@@ -5,7 +5,7 @@ RQ_TYPE_SEED ?= 3
 RQ_BADDR_SEED ?= 79
 CCSIZES_FILE ?= "\"L1LLSimpleSizes.bsv\""
 
-HEMIOLA_LIB_PATH ?= ../../hemiola-syn/syn/integration
+HEMIOLA_LIB_PATH ?= ../../hemiola/syn/integration
 PROC_LIB_PATH ?= ../../riscy-ooo/procs/lib
 
 BSC ?= bsc \
