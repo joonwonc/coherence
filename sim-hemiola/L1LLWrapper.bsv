@@ -72,8 +72,8 @@ module mkL1LLSimple(L1LLSimpleRss);
     interface rsDeqs = map(toFifoDeq, rss);
 endmodule
 
-typedef 1 MemDelay;
-typedef TAdd#(MemAddrSz, AddrOffset) LgTestMemSzBytes; // 16(memSize) + 5(offset)
+typedef 1 MemDelay; // No delays at all, just for testing
+typedef TAdd#(MemAddrSz, AddrOffset) LgTestMemSzBytes;
 
 (* synthesize *)
 module mkIdealDelayMemI(IdealDelayMem#(MemDelay, LgTestMemSzBytes, LdMemRqId#(LLCRqMshrIdx), void));

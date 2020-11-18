@@ -10,11 +10,11 @@ typedef `TEST_CYCLE_CNT TestCycleCnt;
 module mkTop(Empty);
     CCMem mem <- mkCCL1LL();
 
-    // CCTest tester <- mkCCTestIsolated(mem);
+    // CCTest tester <- mkCCTestIsolated(mem.cc);
     CCTest tester <- mkCCTestShared(mem.cc);
-    // CCTest tester <- mkCCTestRandom(mem);
-    // CCTest tester <- mkCCTestCheck(mem);
-    // CCTest tester <- mkCCTestCheckIdxEquiv(mem);
+    // CCTest tester <- mkCCTestRandom(mem.cc);
+    // CCTest tester <- mkCCTestCheck(mem.cc);
+    // CCTest tester <- mkCCTestCheckIdxEquiv(mem.cc);
 
     Reg#(Bool) started <- mkReg(False);
     Reg#(Bool) ended <- mkReg(False);
